@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.PackageElement;
@@ -41,25 +42,8 @@ public final class HandlerValidator {
 
     /** Validates one annotated class, emitting a stable diagnostic when invalid. */
     public Optional<HandlerModel> validate(TypeElement handler, LambdaHandler annotation) {
-        if (handler.getKind() != ElementKind.CLASS) {
-            error(DiagnosticCode.ARES001, handler);
-            return Optional.empty();
-        }
-        if (!handler.getModifiers().contains(Modifier.PUBLIC)) {
-            error(DiagnosticCode.ARES002, handler);
-            return Optional.empty();
-        }
-        if (handler.getModifiers().contains(Modifier.ABSTRACT)) {
-            error(DiagnosticCode.ARES003, handler);
-            return Optional.empty();
-        }
-        if (handler.getNestingKind() != NestingKind.TOP_LEVEL
-                && !handler.getModifiers().contains(Modifier.STATIC)) {
-            error(DiagnosticCode.ARES014, handler);
-            return Optional.empty();
-        }
-        if (!HANDLER_NAME.matcher(annotation.value()).matches()) {
-            error(DiagnosticCode.ARES009, handler);
+        validateHandlerDefinition(handler, annotation);
+        if (hasErrors) {
             return Optional.empty();
         }
         if (!hasPublicNoArgConstructor(handler)) {
@@ -67,10 +51,9 @@ public final class HandlerValidator {
             return Optional.empty();
         }
 
-        List<javax.lang.model.element.ExecutableElement> methods =
-                ElementFilter.methodsIn(handler.getEnclosedElements()).stream()
-                        .filter(method -> method.getSimpleName().contentEquals("handle"))
-                        .toList();
+        List<ExecutableElement> methods = ElementFilter.methodsIn(handler.getEnclosedElements()).stream()
+                .filter(method -> method.getSimpleName().contentEquals("handle"))
+                .toList();
         if (methods.isEmpty()) {
             error(DiagnosticCode.ARES005, handler);
             return Optional.empty();
@@ -102,26 +85,37 @@ public final class HandlerValidator {
                 method.returnsVoid()));
     }
 
-    private Optional<HandlerMethodModel> validateMethod(javax.lang.model.element.ExecutableElement method) {
-        if (!method.getModifiers().contains(Modifier.PUBLIC)
-                || method.getModifiers().contains(Modifier.STATIC)) {
-            error(DiagnosticCode.ARES006, method);
-            return Optional.empty();
+    private void validateHandlerDefinition(TypeElement handler, LambdaHandler annotation) {
+        if (handler.getKind() != ElementKind.CLASS) {
+            error(DiagnosticCode.ARES001, handler);
         }
-        if (!method.getTypeParameters().isEmpty()) {
-            error(DiagnosticCode.ARES012, method);
+        if (!handler.getModifiers().contains(Modifier.PUBLIC)) {
+            error(DiagnosticCode.ARES002, handler);
+        }
+        if (handler.getModifiers().contains(Modifier.ABSTRACT)) {
+            error(DiagnosticCode.ARES003, handler);
+        }
+        if (handler.getNestingKind() != NestingKind.TOP_LEVEL
+                && !handler.getModifiers().contains(Modifier.STATIC)) {
+            error(DiagnosticCode.ARES014, handler);
+        }
+        if (!HANDLER_NAME.matcher(annotation.value()).matches()) {
+            error(DiagnosticCode.ARES009, handler);
+        }
+    }
+
+    private Optional<HandlerMethodModel> validateMethod(ExecutableElement method) {
+        Optional<DiagnosticCode> declarationError = methodDeclarationError(method);
+        if (declarationError.isPresent()) {
+            error(declarationError.orElseThrow(), method);
             return Optional.empty();
         }
         List<? extends VariableElement> parameters = method.getParameters();
-        if (parameters.size() < 1 || parameters.size() > 2) {
-            error(DiagnosticCode.ARES007, method);
+        Optional<Boolean> contextResult = validateParameters(parameters, method);
+        if (contextResult.isEmpty()) {
             return Optional.empty();
         }
-        boolean acceptsContext = parameters.size() == 2;
-        if (acceptsContext && !isInvocationContext(parameters.get(1).asType())) {
-            error(DiagnosticCode.ARES015, method);
-            return Optional.empty();
-        }
+        boolean acceptsContext = contextResult.orElseThrow();
         TypeMirror inputType = parameters.getFirst().asType();
         TypeMirror outputType = method.getReturnType();
         if (!isAccessible(inputType) || inputType.getKind() == TypeKind.VOID) {
@@ -143,6 +137,30 @@ public final class HandlerValidator {
                 returnsVoid ? "java.lang.Void" : outputType.toString(),
                 acceptsContext,
                 returnsVoid));
+    }
+
+    private Optional<DiagnosticCode> methodDeclarationError(ExecutableElement method) {
+        if (!method.getModifiers().contains(Modifier.PUBLIC)
+                || method.getModifiers().contains(Modifier.STATIC)) {
+            return Optional.of(DiagnosticCode.ARES006);
+        }
+        if (!method.getTypeParameters().isEmpty()) {
+            return Optional.of(DiagnosticCode.ARES012);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Boolean> validateParameters(List<? extends VariableElement> parameters, ExecutableElement method) {
+        if (parameters.size() < 1 || parameters.size() > 2) {
+            error(DiagnosticCode.ARES007, method);
+            return Optional.empty();
+        }
+        boolean acceptsContext = parameters.size() == 2;
+        if (acceptsContext && !isInvocationContext(parameters.get(1).asType())) {
+            error(DiagnosticCode.ARES015, method);
+            return Optional.empty();
+        }
+        return Optional.of(acceptsContext);
     }
 
     private boolean hasPublicNoArgConstructor(TypeElement handler) {

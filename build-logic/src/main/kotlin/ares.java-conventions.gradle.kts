@@ -4,6 +4,8 @@ plugins {
     java
     checkstyle
     jacoco
+    pmd
+    id("info.solidsoft.pitest")
     id("com.github.spotbugs")
     id("com.diffplug.spotless")
 }
@@ -24,6 +26,24 @@ spotbugs {
 }
 
 jacoco { toolVersion = "0.8.14" }
+
+pmd {
+    toolVersion = "7.26.0"
+    isIgnoreFailures = false
+    ruleSetFiles = files(rootProject.file("config/pmd/pmd.xml"))
+    ruleSets = emptyList()
+}
+
+pitest {
+    junit5PluginVersion.set("1.2.3")
+    pitestVersion.set("1.19.0")
+    targetClasses.set(setOf("io.github.aresprojects.${project.name.removePrefix("ares-")}.*"))
+    mutationThreshold.set(90)
+    threads.set(2)
+    outputFormats.set(setOf("HTML", "XML"))
+    timestampedReports.set(false)
+    failWhenNoMutations.set(project.name != "ares-annotations")
+}
 
 spotless {
     java {
@@ -60,6 +80,8 @@ tasks.withType<JacocoCoverageVerification>().configureEach {
 
 tasks.named("check") {
     dependsOn("jacocoTestCoverageVerification")
+    dependsOn("pmdMain", "pmdTest")
+    dependsOn("pitest")
 }
 
 tasks.withType<Test>().configureEach {

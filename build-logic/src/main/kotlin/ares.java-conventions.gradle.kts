@@ -10,6 +10,10 @@ plugins {
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
 
+dependencies {
+    "testRuntimeOnly"("org.junit.platform:junit-platform-launcher:1.12.2")
+}
+
 checkstyle {
     configFile = rootProject.file("config/checkstyle/checkstyle.xml")
     isIgnoreFailures = false
@@ -23,7 +27,7 @@ jacoco { toolVersion = "0.8.14" }
 
 spotless {
     java {
-        palantirJavaFormat("2.39.0")
+        palantirJavaFormat("2.93.0")
         removeUnusedImports()
         trimTrailingWhitespace()
         endWithNewline()
@@ -56,4 +60,8 @@ tasks.withType<JacocoCoverageVerification>().configureEach {
 
 tasks.named("check") {
     dependsOn("jacocoTestCoverageVerification")
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }

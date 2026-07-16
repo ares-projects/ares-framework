@@ -2,4 +2,4 @@
 
 Spotless, using Palantir Java Format 2.39.0, is the source of truth for formatting. Run `./gradlew spotlessApply` before completing Java changes.
 
-Use Java 21, explicit imports, immutable types where practical, and Javadoc for public APIs. Checkstyle supplements formatting with semantic conventions.
+Use Java 21, explicit imports, immutable types where practical, and Javadoc for public APIs. Checkstyle and SpotBugs run as part of `check`; JaCoCo requires at least 95% line coverage for each module with production code.

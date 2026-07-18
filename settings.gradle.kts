@@ -12,4 +12,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ares-framework"
 includeBuild("build-logic")
-include("ares-annotations", "ares-processor", "ares-runtime", "ares-test")
+include("ares-annotations", "ares-runtime", "ares-processor", "examples:hello-lambda")
